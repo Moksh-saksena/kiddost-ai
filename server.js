@@ -9,34 +9,23 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-/*
-==============================
-  HEALTH CHECK ROUTE
-==============================
-*/
+/* HEALTH CHECK */
 app.get("/", (req, res) => {
   res.send("Kiddost AI is running 🚀");
 });
 
-/*
-==============================
-  BOTSPACE WEBHOOK
-==============================
-*/
+/* WEBHOOK */
 app.post("/webhook", async (req, res) => {
   try {
+    console.log("==== NEW MESSAGE ====");
+    console.log("BotSpace Key Length:", process.env.BOTSPACE_API_KEY?.length);
+
     console.log("Full incoming body:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    // Extract message safely
-    const message =
-      req.body?.payload?.payload?.text || null;
-
-    const countryCode =
-      req.body?.phone?.countryCode || "";
-
-    const phone =
-      req.body?.phone?.phone || "";
+    const message = req.body?.payload?.payload?.text;
+    const countryCode = req.body?.phone?.countryCode;
+    const phone = req.body?.phone?.phone;
 
     const from = `${countryCode}${phone}`;
 
@@ -47,12 +36,7 @@ app.post("/webhook", async (req, res) => {
       return res.status(200).send("No text message");
     }
 
-    /*
-    ==============================
-      OPENAI CALL
-    ==============================
-    */
-
+    /* OPENAI */
     const openaiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
@@ -61,12 +45,9 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content:
-              "You are Kiddost AI assistant. Answer clearly, friendly and concise."
+              "You are Kiddost AI assistant. Be friendly, clear and concise."
           },
-          {
-            role: "user",
-            content: message
-          }
+          { role: "user", content: message }
         ]
       },
       {
@@ -77,45 +58,39 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    const aiReply =
-      openaiResponse.data.choices[0].message.content;
+    const aiReply = openaiResponse.data.choices[0].message.content;
 
     console.log("AI Reply:", aiReply);
-    console.log("KEY LENGTH:", process.env.BOTSPACE_API_KEY?.length);
-    /*
-    ==============================
-      SEND MESSAGE BACK TO BOTSPACE
-    ==============================
-    */
 
-      await axios.post(
-  "https://public-api.bot.space/v1/69a6fb50136d322a1f67dbd5/message/send-session-message",
-  {
-    phone: from,
-    message: {
-      type: "text",
-      text: aiReply
-    }
-  },
-  {
-    headers: {
-      "x-api-key": process.env.BOTSPACE_API_KEY,
-      "Content-Type": "application/json"
-    }
-  }
-);
+    /* SEND BACK TO BOTSPACE */
+    const botspaceResponse = await axios.post(
+      "https://public-api.bot.space/v1/69a6fb50136d322a1f67dbd5/message/send-session-message",
+      {
+        phone: from,
+        message: {
+          type: "text",
+          text: aiReply
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.BOTSPACE_API_KEY}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log("BotSpace Response:", botspaceResponse.data);
+
     res.status(200).send("OK");
   } catch (error) {
-    console.error("ERROR:", error.response?.data || error.message);
+    console.error("=== BOTSPACE ERROR ===");
+    console.error(error.response?.data || error.message);
     res.status(200).send("Error handled");
   }
 });
 
-/*
-==============================
-  START SERVER
-==============================
-*/
+/* START SERVER */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
