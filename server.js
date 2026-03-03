@@ -74,7 +74,7 @@ app.post("/webhook", async (req, res) => {
     const aiReply = openaiRes.data.choices[0].message.content;
 
     console.log("AI Reply:", aiReply);
-
+    console.log("BOTSPACE KEY:", process.env.BOTSPACE_API_KEY);
     /*
     ==============================
       SEND BACK TO BOTSPACE
