@@ -64,7 +64,7 @@ app.post("/webhook", async (req, res) => {
 
     /* SEND BACK TO BOTSPACE */
     const botspaceResponse = await axios.post(
-      "https://public-api.bot.space/v1/69a6fb50136d322a1f67dbd5/message/send-session-message",
+      "https://public-api.bot.space/v1/channel/{69a01f1323c371226c2c3cea}/message/send-session-message",
       {
         phone: from,
         message: {
