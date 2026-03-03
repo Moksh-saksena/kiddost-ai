@@ -13,7 +13,7 @@ app.post("/webhook", async (req, res) => {
     if (!message) return res.sendStatus(200);
 
     console.log("Incoming message:", message);
-
+    console.log("Full body:", req.body);
     // Call OpenAI
     const aiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
