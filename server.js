@@ -97,7 +97,7 @@ app.post("/webhook", async (req, res) => {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.BOTSPACE_API_KEY}`,
+          "x-api-key": process.env.BOTSPACE_API_KEY,
           "Content-Type": "application/json"
         }
       }
