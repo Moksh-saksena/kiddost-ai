@@ -38,17 +38,11 @@ app.post("/webhook", async (req, res) => {
 
     console.log("AI Reply:", aiReply);
 
-    await axios.post(
-      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message`,
-      {
-        to: from,
-        type: "text",
-        text: aiReply
-      },
+    await axios.get(
+      "https://public-api.bot.space/v1/contact",
       {
         headers: {
-          Authorization: `Bearer ${BOTSPACE_API_KEY}`,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${BOTSPACE_API_KEY}`
         }
       }
     );
