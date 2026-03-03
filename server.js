@@ -7,33 +7,53 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-/* Health Check */
+const PORT = process.env.PORT || 10000;
+
+/*
+==============================
+  HEALTH CHECK ROUTE
+==============================
+*/
 app.get("/", (req, res) => {
-  res.send("Server is running");
+  res.send("Kiddost AI is running 🚀");
 });
 
-/* Webhook */
+/*
+==============================
+  BOTSPACE WEBHOOK
+==============================
+*/
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("==== NEW WEBHOOK HIT ====");
+    console.log("Full incoming body:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    const message = req.body?.payload?.payload?.text;
-    const countryCode = req.body?.phone?.countryCode;
-    const phone = req.body?.phone?.phone;
+    // Extract message safely
+    const message =
+      req.body?.payload?.payload?.text || null;
 
-    if (!message || !countryCode || !phone) {
-      console.log("Missing required data");
-      return res.status(200).send("OK");
+    const countryCode =
+      req.body?.phone?.countryCode || "";
+
+    const phone =
+      req.body?.phone?.phone || "";
+
+    const from = `${countryCode}${phone}`;
+
+    console.log("Extracted message:", message);
+    console.log("From:", from);
+
+    if (!message) {
+      return res.status(200).send("No text message");
     }
 
-    const fullNumber = `${countryCode}${phone}`;
+    /*
+    ==============================
+      OPENAI CALL
+    ==============================
+    */
 
-    console.log("User said:", message);
-    console.log("From:", fullNumber);
-
-    /* 🧠 Call OpenAI */
-    const aiResponse = await axios.post(
+    const openaiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
         model: "gpt-4o-mini",
@@ -41,9 +61,12 @@ app.post("/webhook", async (req, res) => {
           {
             role: "system",
             content:
-              "You are the KidDost AI assistant. Be friendly, helpful, and clear. Help parents understand programs and answer questions."
+              "You are Kiddost AI assistant. Answer clearly, friendly and concise."
           },
-          { role: "user", content: message }
+          {
+            role: "user",
+            content: message
+          }
         ]
       },
       {
@@ -54,18 +77,23 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    const reply =
-      aiResponse.data.choices[0].message.content;
+    const aiReply =
+      openaiResponse.data.choices[0].message.content;
 
-    console.log("AI Reply:", reply);
+    console.log("AI Reply:", aiReply);
 
-    /* 📤 Send reply via BotSpace API */
+    /*
+    ==============================
+      SEND MESSAGE BACK TO BOTSPACE
+    ==============================
+    */
+
     await axios.post(
-      "https://api.bot.space/messages",
+      "https://public-api.bot.space/v1/69a6fb50136d322a1f67dbd5/message/send-session-message",
       {
-        to: fullNumber,
+        to: from,
         type: "text",
-        text: reply
+        text: aiReply
       },
       {
         headers: {
@@ -75,17 +103,20 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    console.log("Reply sent successfully");
+    console.log("Message sent successfully ✅");
 
     res.status(200).send("OK");
   } catch (error) {
     console.error("ERROR:", error.response?.data || error.message);
-    res.status(500).send("Error");
+    res.status(200).send("Error handled");
   }
 });
 
-/* Start Server */
-const PORT = process.env.PORT || 10000;
+/*
+==============================
+  START SERVER
+==============================
+*/
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
