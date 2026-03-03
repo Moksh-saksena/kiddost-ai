@@ -1,87 +1,45 @@
 import express from "express";
 import axios from "axios";
-import dotenv from "dotenv";
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-/*
-==============================
-  HEALTH CHECK
-==============================
-*/
+const CHANNEL_ID = "69a6fb50136d322a1f67dbd5"; // your WhatsApp channel ID
+const BOTSPACE_API_KEY = process.env.BOTSPACE_API_KEY;
+
+// Health route (so Render doesn't show Cannot GET /)
 app.get("/", (req, res) => {
-  res.send("Kiddost AI running 🚀");
+  res.send("Server running");
 });
 
-/*
-==============================
-  BOTSPACE WEBHOOK
-==============================
-*/
 app.post("/webhook", async (req, res) => {
   try {
-    console.log("==== NEW MESSAGE ====");
+    console.log("Full incoming body:");
     console.log(JSON.stringify(req.body, null, 2));
 
-    // Extract message
-    const message = req.body?.payload?.payload?.text;
-    const countryCode = req.body?.phone?.countryCode;
-    const phone = req.body?.phone?.phone;
+    const message =
+      req.body?.payload?.payload?.text || "";
 
-    if (!message || !countryCode || !phone) {
-      return res.status(200).send("No valid message");
-    }
-
+    const countryCode = req.body?.phone?.countryCode || "";
+    const phone = req.body?.phone?.phone || "";
     const from = `${countryCode}${phone}`;
 
-    console.log("User said:", message);
+    console.log("Extracted message:", message);
     console.log("From:", from);
 
-    /*
-    ==============================
-      CALL OPENAI
-    ==============================
-    */
-    const openaiRes = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
-      {
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are Kiddost AI assistant. Be friendly, clear and helpful."
-          },
-          {
-            role: "user",
-            content: message
-          }
-        ]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json"
-        }
-      }
-    );
+    if (!message) {
+      return res.sendStatus(200);
+    }
 
-    const aiReply = openaiRes.data.choices[0].message.content;
+    // Simple AI reply (replace with OpenAI later)
+    const aiReply = `Hello! How can I assist you today?`;
 
     console.log("AI Reply:", aiReply);
-    console.log("BOTSPACE KEY:", process.env.BOTSPACE_API_KEY);
-    /*
-    ==============================
-      SEND BACK TO BOTSPACE
-    ==============================
-    */
-    const botspaceRes = await axios.post(
-      "https://public-api.bot.space/v1/69a6fb50136d322a1f67dbd5/message/send-session-message",
+
+    await axios.post(
+      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message`,
       {
         to: from,
         type: "text",
@@ -89,27 +47,22 @@ app.post("/webhook", async (req, res) => {
       },
       {
         headers: {
-          "x-api-key": process.env.BOTSPACE_API_KEY,
+          Authorization: `Bearer ${BOTSPACE_API_KEY}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    console.log("BotSpace Response:", botspaceRes.data);
+    console.log("Message sent successfully");
 
-    res.status(200).send("OK");
+    res.sendStatus(200);
   } catch (error) {
-    console.error("=== ERROR ===");
-    console.error(error.response?.data || error.message);
-    res.status(200).send("Handled");
+    console.log("=== BOTSPACE ERROR ===");
+    console.log(error.response?.data || error.message);
+    res.sendStatus(200);
   }
 });
 
-/*
-==============================
-  START SERVER
-==============================
-*/
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
