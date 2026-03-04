@@ -3,13 +3,11 @@ import axios from "axios";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import cors from "cors";
-
-app.use(cors());
 dotenv.config();
 
 const app = express();
 app.use(express.json());
-
+app.use(cors());
 const PORT = process.env.PORT || 10000;
 
 // Keys
