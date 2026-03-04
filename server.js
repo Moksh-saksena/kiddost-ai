@@ -2,7 +2,9 @@ import express from "express";
 import axios from "axios";
 import dotenv from "dotenv";
 import { createClient } from "@supabase/supabase-js";
+import cors from "cors";
 
+app.use(cors());
 dotenv.config();
 
 const app = express();
