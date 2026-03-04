@@ -53,7 +53,7 @@ app.post("/webhook", async (req, res) => {
     });
 
     // Fetch last 10 messages for conversation memory
-    const { data: history } = await supabase
+    const { data: history = []} = await supabase
       .from("messages")
       .select("role, content")
       .eq("phone", fullPhone)
