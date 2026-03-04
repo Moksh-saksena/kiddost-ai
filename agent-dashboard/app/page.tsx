@@ -139,7 +139,8 @@ export default function Home() {
                       m.sender === "agent" || m.sender === "ai"
                         ? "#dcf8c6"
                         : "#ffffff",
-                    maxWidth: "60%"
+                    maxWidth: "60%",
+                    color: "black"
                   }}>
                     {m.content}
                   </div>
