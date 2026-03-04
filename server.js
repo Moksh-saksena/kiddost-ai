@@ -53,13 +53,18 @@ app.post("/webhook", async (req, res) => {
     });
 
     // Fetch last 10 messages for conversation memory
-    const { data: history = []} = await supabase
+    const { data, error } = await supabase
       .from("messages")
       .select("role, content")
       .eq("phone", fullPhone)
       .order("created_at", { ascending: true })
       .limit(10);
 
+    if (error) {
+      console.log("Supabase fetch error:", error);
+    }
+
+    const history = Array.isArray(data) ? data : [];
     // OpenAI response
     const aiResponse = await axios.post(
       "https://api.openai.com/v1/chat/completions",
