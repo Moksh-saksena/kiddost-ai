@@ -41,7 +41,17 @@ app.post("/webhook", async (req, res) => {
     }
 
     const fullPhone = `+${countryCode}${phone}`;
+    const { data: existingConversation } = await supabase
+      .from("conversations")
+      .select("phone")
+      .eq("phone", fullPhone)
+      .maybeSingle();
 
+    if (!existingConversation) {
+      await supabase.from("conversations").insert({
+        phone: fullPhone
+      });
+    }
     console.log("Extracted message:", message);
     console.log("From:", fullPhone);
 
@@ -49,7 +59,8 @@ app.post("/webhook", async (req, res) => {
     await supabase.from("messages").insert({
       phone: fullPhone,
       role: "user",
-      content: message
+      content: message,
+      sender: "user"
     });
 
     // Fetch last 10 messages for conversation memory
@@ -95,7 +106,8 @@ app.post("/webhook", async (req, res) => {
     await supabase.from("messages").insert({
       phone: fullPhone,
       role: "assistant",
-      content: aiReply
+      content: aiReply,
+      sender: "ai"
     });
 
     // Send message back via BotSpace
