@@ -46,8 +46,8 @@ export default function AppClient() {
     if (!data) return;
     const msgs: Message[] = data.map((m: any) => ({
       id: String(m.id || m.created_at),
-      text: m.content || m.text || "",
-      sender: (m.role && m.role === 'user') ? 'other' : 'me',
+      text: m.content || m.text || '',
+      sender: ((m.role && m.role === 'user') ? 'other' : 'me') as 'me' | 'other',
       time: m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
     }));
     setMessages(msgs);
@@ -84,7 +84,7 @@ export default function AppClient() {
             const mapped = {
               id: String(msg.id || msg.created_at),
               text: msg.content || msg.text || '',
-              sender: (msg.role && msg.role === 'user') ? 'other' : 'me',
+              sender: ((msg.role && msg.role === 'user') ? 'other' : 'me') as 'me' | 'other',
               time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
             };
             setMessages((prev) => [...prev, mapped]);
