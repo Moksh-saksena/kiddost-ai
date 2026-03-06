@@ -45,7 +45,7 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
     try {
       const safeName = file.name.replace(/[^a-zA-Z0-9.\-_\.]/g, "_");
       const path = `${chatId}/${Date.now()}_${safeName}`;
-      const { data: uploadData, error: uploadErr } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false });
+      const { data: uploadData, error: uploadErr } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream' });
       if (uploadErr) {
         console.error('direct upload error', uploadErr.message || uploadErr);
         // fallback: try server upload
@@ -57,7 +57,7 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
             const resp = await fetch('https://kiddost-ai.onrender.com/upload-media-server', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ fileBase64: base64, fileName: file.name, phone: chatId })
+              body: JSON.stringify({ fileBase64: base64, fileName: file.name, fileType: file.type || 'application/octet-stream', phone: chatId })
             });
             const json = await resp.json();
             if (!json || !json.publicUrl) {

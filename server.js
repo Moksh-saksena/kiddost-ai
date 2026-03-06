@@ -422,7 +422,7 @@ app.post('/upload-media-server', express.json({ limit: '100mb' }), async (req, r
       return res.sendStatus(200);
     }
     if (!supabaseService) return res.status(500).json({ error: 'missing_service_role_key' });
-    const { fileBase64, fileName, phone } = req.body;
+    const { fileBase64, fileName, phone, fileType } = req.body;
     if (!fileBase64 || !fileName || !phone) return res.status(400).json({ error: 'missing_params' });
 
     // sanitize phone for storage path: remove leading + to avoid issues with some fetchers
@@ -432,7 +432,9 @@ app.post('/upload-media-server', express.json({ limit: '100mb' }), async (req, r
 
     const buffer = Buffer.from(fileBase64, 'base64');
 
-    const { error: uploadError } = await supabaseService.storage.from('media').upload(path, buffer, { cacheControl: '3600', upsert: false });
+    const uploadOptions = { cacheControl: '3600', upsert: false, contentType: fileType || 'application/octet-stream' };
+
+    const { error: uploadError } = await supabaseService.storage.from('media').upload(path, buffer, uploadOptions);
     if (uploadError) {
       console.error('service upload error', uploadError);
       return res.status(500).json({ error: 'upload_failed', detail: uploadError.message || uploadError });
