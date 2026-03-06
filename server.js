@@ -358,7 +358,10 @@ app.post("/agent-send-media", async (req, res) => {
         {
           phone,
           text: caption || ' ',
-          mediaUrl
+          type: 'image',
+          media: {
+            url: mediaUrl
+          }
         },
         {
           params: { apiKey: BOTSPACE_API_KEY }
