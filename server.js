@@ -7,9 +7,12 @@ dotenv.config();
 
 const app = express();
 app.use(express.json());
-// Enable CORS for all origins (can be restricted via CORS_ORIGIN env)
-const CORS_ORIGIN = process.env.CORS_ORIGIN || true;
-app.use(cors({ origin: CORS_ORIGIN }));
+// Restrict CORS to the Vercel frontend origin
+app.use(cors({
+  origin: "https://kiddost-ai.vercel.app",
+  methods: ["GET", "POST"],
+  allowedHeaders: ["Content-Type"]
+}));
 const PORT = process.env.PORT || 10000;
 
 // Keys
