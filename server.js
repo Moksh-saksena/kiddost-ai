@@ -381,6 +381,23 @@ app.post("/agent-send-media", async (req, res) => {
   }
 });
 
+// Ensure the 'media' storage bucket exists (idempotent) — useful when client can't upload
+app.post('/ensure-media-bucket', async (req, res) => {
+  try {
+    const bucketName = 'media';
+    // try to create bucket; if it exists, Supabase returns an error which we ignore
+    const { data, error } = await supabase.storage.createBucket(bucketName, { public: true });
+    if (error && !/already exists/i.test(String(error.message || ''))) {
+      console.error('createBucket error', error.message || error);
+      return res.status(500).json({ error: true, detail: 'create_bucket_failed' });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('/ensure-media-bucket error', err.message || err);
+    return res.status(500).json({ error: true });
+  }
+});
+
 // Toggle AI on/off via system message
 app.post('/toggle-ai', async (req, res) => {
   try {

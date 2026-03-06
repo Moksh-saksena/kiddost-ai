@@ -43,10 +43,32 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
     if (!file) return;
     const path = `media/${chatId}/${Date.now()}_${file.name}`;
     try {
+      // Ensure bucket exists on server (idempotent). Try creating it if missing.
+      try {
+        await fetch('https://kiddost-ai.onrender.com/ensure-media-bucket', { method: 'POST' });
+      } catch (err) {
+        // ignore — best-effort
+        console.warn('ensure-media-bucket failed (continuing):', err);
+      }
       const { error: uploadError } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false });
       if (uploadError) {
         console.error('upload error', uploadError.message || uploadError);
-        return;
+        // If the bucket was missing, try creating via server and retry once
+        if (/Bucket not found/i.test(String(uploadError.message || ''))) {
+          try {
+            await fetch('https://kiddost-ai.onrender.com/ensure-media-bucket', { method: 'POST' });
+            const { error: retryErr } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false });
+            if (retryErr) {
+              console.error('retry upload error', retryErr.message || retryErr);
+              return;
+            }
+          } catch (e) {
+            console.error('retry create/upload failed', e);
+            return;
+          }
+        } else {
+          return;
+        }
       }
       const publicRes = supabase.storage.from('media').getPublicUrl(path);
       const publicURL = publicRes?.data?.publicUrl || null;
