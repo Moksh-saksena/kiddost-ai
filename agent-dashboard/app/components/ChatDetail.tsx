@@ -41,7 +41,8 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
   const uploadMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const path = `media/${chatId}/${Date.now()}_${file.name}`;
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_\.]/g, "_");
+    const path = `${chatId}/${Date.now()}_${safeName}`;
     try {
       // Ensure bucket exists on server (idempotent). Try creating it if missing.
       try {
