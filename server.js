@@ -21,6 +21,13 @@ const supabase = createClient(
   process.env.SUPABASE_KEY
 );
 
+// Service-role client for server-side uploads (requires SUPABASE_SERVICE_ROLE_KEY env)
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let supabaseService = null;
+if (SUPABASE_SERVICE_ROLE_KEY) {
+  supabaseService = createClient(process.env.SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+}
+
 // In-memory buffering to combine fragmented user messages per phone
 const messageBuffers = {};
 const messageTimers = {};
@@ -394,6 +401,33 @@ app.post('/ensure-media-bucket', async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('/ensure-media-bucket error', err.message || err);
+    return res.status(500).json({ error: true });
+  }
+});
+
+// Server-side upload endpoint: accepts base64 file, uploads to Supabase storage using service role, returns public URL
+app.post('/upload-media-server', express.json({ limit: '50mb' }), async (req, res) => {
+  try {
+    if (!supabaseService) return res.status(500).json({ error: 'missing_service_role_key' });
+    const { fileBase64, fileName, phone } = req.body;
+    if (!fileBase64 || !fileName || !phone) return res.status(400).json({ error: 'missing_params' });
+
+    const safeName = String(fileName).replace(/[^a-zA-Z0-9.\-_\.]/g, '_');
+    const path = `${phone}/${Date.now()}_${safeName}`;
+
+    const buffer = Buffer.from(fileBase64, 'base64');
+
+    const { error: uploadError } = await supabaseService.storage.from('media').upload(path, buffer, { cacheControl: '3600', upsert: false });
+    if (uploadError) {
+      console.error('service upload error', uploadError);
+      return res.status(500).json({ error: 'upload_failed', detail: uploadError.message || uploadError });
+    }
+
+    const publicRes = supabaseService.storage.from('media').getPublicUrl(path);
+    const publicUrl = publicRes?.data?.publicUrl || null;
+    return res.json({ success: true, publicUrl });
+  } catch (err) {
+    console.error('/upload-media-server error', err.message || err);
     return res.status(500).json({ error: true });
   }
 });

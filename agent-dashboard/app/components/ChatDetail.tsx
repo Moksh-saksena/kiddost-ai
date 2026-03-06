@@ -41,52 +41,37 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
   const uploadMedia = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_\.]/g, "_");
-    const path = `${chatId}/${Date.now()}_${safeName}`;
     try {
-      // Ensure bucket exists on server (idempotent). Try creating it if missing.
-      try {
-        await fetch('https://kiddost-ai.onrender.com/ensure-media-bucket', { method: 'POST' });
-      } catch (err) {
-        // ignore — best-effort
-        console.warn('ensure-media-bucket failed (continuing):', err);
-      }
-      const { error: uploadError } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false });
-      if (uploadError) {
-        console.error('upload error', uploadError.message || uploadError);
-        // If the bucket was missing, try creating via server and retry once
-        if (/Bucket not found/i.test(String(uploadError.message || ''))) {
-          try {
-            await fetch('https://kiddost-ai.onrender.com/ensure-media-bucket', { method: 'POST' });
-            const { error: retryErr } = await supabase.storage.from('media').upload(path, file, { cacheControl: '3600', upsert: false });
-            if (retryErr) {
-              console.error('retry upload error', retryErr.message || retryErr);
-              return;
-            }
-          } catch (e) {
-            console.error('retry create/upload failed', e);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const dataUrl = reader.result as string;
+          const base64 = dataUrl.split(',')[1];
+          const resp = await fetch('https://kiddost-ai.onrender.com/upload-media-server', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fileBase64: base64, fileName: file.name, phone: chatId })
+          });
+          const json = await resp.json();
+          if (!json || !json.publicUrl) {
+            console.error('server upload failed', json);
             return;
           }
-        } else {
-          return;
+          const publicURL = json.publicUrl;
+          // optimistic UI insert
+          setMessages((prev) => [...prev, { id: `local-${Date.now()}`, text: '', sender: 'me', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), media_url: publicURL, status: 'sending' } as Message]);
+
+          // notify backend to send media
+          await fetch('https://kiddost-ai.onrender.com/agent-send-media', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: chatId, mediaUrl: publicURL, caption: '' })
+          });
+        } catch (err) {
+          console.error('uploadMedia - server upload failed', err);
         }
-      }
-      const publicRes = supabase.storage.from('media').getPublicUrl(path);
-      const publicURL = publicRes?.data?.publicUrl || null;
-      if (!publicURL) {
-        console.error('failed to get public url for uploaded media');
-        return;
-      }
-
-      // optimistic UI insert
-      setMessages((prev) => [...prev, { id: `local-${Date.now()}`, text: '', sender: 'me', time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), media_url: publicURL, status: 'sending' } as Message]);
-
-      // notify backend to send media
-      await fetch('https://kiddost-ai.onrender.com/agent-send-media', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: chatId, mediaUrl: publicURL, caption: '' })
-      });
+      };
+      reader.readAsDataURL(file);
     } catch (err) {
       console.error('uploadMedia error', err);
     }
