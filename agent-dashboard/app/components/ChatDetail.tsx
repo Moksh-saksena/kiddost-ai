@@ -114,9 +114,9 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
           if (message.sender === 'system') {
             return (
               <div key={message.id} className="flex justify-center">
-                <div className={`px-3 py-1 rounded-full text-xs ${isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-gray-200 text-gray-700'}`}>
-                  {message.text}
-                </div>
+                <div className={`px-2 py-1 rounded-md text-xs ${isDarkMode ? 'bg-gray-700 text-gray-200' : 'bg-gray-200 text-gray-700'}`} style={{ maxWidth: 320 }}>
+                        {message.text}
+                      </div>
               </div>
             );
           }
