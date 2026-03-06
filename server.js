@@ -345,61 +345,42 @@ app.post("/agent-send", async (req, res) => {
 
 // Endpoint to send media messages from agent and record them
 app.post("/agent-send-media", async (req, res) => {
+  const { phone, mediaUrl, caption } = req.body;
+
   try {
-    console.log('/agent-send-media body:', JSON.stringify(req.body).slice(0,2000));
-    const { phone, mediaUrl, caption } = req.body;
-    if (!phone || !mediaUrl) return res.status(400).json({ error: "missing phone or mediaUrl" });
-
-    let botResp;
-    try {
-      // BotSpace does not have a /send-media route; use send-session-message and include mediaUrl
-      botResp = await axios.post(
-        `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message`,
-        {
-          phone,
-          text: caption || ' ',
-          type: 'image',
-          media: {
-            url: mediaUrl
-          }
-        },
-        {
-          params: { apiKey: BOTSPACE_API_KEY }
+    const response = await axios.post(
+      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message?apiKey=${BOTSPACE_API_KEY}`,
+      {
+        name: "Agent",
+        phone: phone,
+        text: caption || " ",
+        type: "image",
+        media: {
+          url: mediaUrl
         }
-      );
-    } catch (err) {
-      console.error("BotSpace send-session-message (media) error", err.response?.data || err.message || err);
-      return res.status(500).json({ error: true, detail: "botspace_send_failed" });
-    }
+      },
+      {
+        headers: {
+          "Content-Type": "application/json"
+        }
+      }
+    );
 
-    const whatsappId = botResp?.data?.messageId || botResp?.data?.id || botResp?.data?.message_id || null;
-    const status = botResp?.data?.status || "sent";
+    const whatsappId = response?.data?.messageId || response?.data?.id || response?.data?.message_id || null;
 
-    try {
-      await supabase.from("messages").insert({
-        phone,
-        role: "assistant",
-        content: caption || null,
-        sender: "agent",
-        agent: req.body.agent || "Daksh",
-        ai_enabled: false,
-        media_url: mediaUrl,
-        whatsapp_id: whatsappId,
-        status
-      });
-    } catch (dbErr) {
-      console.error("Failed to insert media message into supabase", dbErr?.message || dbErr);
-    }
-
-    res.json({ success: true, whatsapp_id: whatsappId, status });
-  } catch (err) {
-    console.error("/agent-send-media error details:", {
-      message: err.message,
-      stack: err.stack,
-      responseData: err.response?.data || null
+    await supabase.from("messages").insert({
+      phone,
+      content: caption || "",
+      sender: "agent",
+      media_url: mediaUrl,
+      whatsapp_id: whatsappId
     });
-    const detail = err.response?.data || err.message || 'unknown_error';
-    res.status(500).json({ error: true, detail });
+
+    res.json({ success: true });
+
+  } catch (err) {
+    console.error("BotSpace media error", err.response?.data || err);
+    res.status(500).json({ error: "Media send failed" });
   }
 });
 
