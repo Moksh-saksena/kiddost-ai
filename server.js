@@ -350,21 +350,21 @@ app.post("/agent-send-media", async (req, res) => {
   console.log("/agent-send-media body:", req.body)
 
   try {
+    // Build payload expected by BotSpace: top-level media.url and non-empty text
+    const botPayload = {
+      phone: phone,
+      name: "Agent",
+      text: caption || ' ',
+      media: {
+        url: mediaUrl
+      }
+    }
+
+    console.log('BOTSPACE PAYLOAD', botPayload)
 
     const response = await axios.post(
       `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message?apiKey=${BOTSPACE_API_KEY}`,
-      {
-        phone: phone,
-        name: "Agent",
-        text: caption || ' ',
-        payload: {
-          type: "image",
-          payload: {
-            url: mediaUrl,
-            caption: caption || ""
-          }
-        }
-      },
+      botPayload,
       {
         headers: {
           "Content-Type": "application/json"
@@ -422,8 +422,10 @@ app.post('/upload-media-server', express.json({ limit: '100mb' }), async (req, r
     const { fileBase64, fileName, phone } = req.body;
     if (!fileBase64 || !fileName || !phone) return res.status(400).json({ error: 'missing_params' });
 
+    // sanitize phone for storage path: remove leading + to avoid issues with some fetchers
+    const safePhone = String(phone).replace(/^\+/, '');
     const safeName = String(fileName).replace(/[^a-zA-Z0-9.\-_\.]/g, '_');
-    const path = `${phone}/${Date.now()}_${safeName}`;
+    const path = `${safePhone}/${Date.now()}_${safeName}`;
 
     const buffer = Buffer.from(fileBase64, 'base64');
 
