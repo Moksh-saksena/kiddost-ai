@@ -56,14 +56,20 @@ app.post("/webhook", async (req, res) => {
     console.log("From:", fullPhone);
 
     // Determine previous AI state for this conversation
-    const { data: lastBefore } = await supabase
-      .from("messages")
-      .select("*")
-      .eq("phone", fullPhone)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single()
-      .catch(() => ({ data: null }));
+    let lastBefore = null;
+    try {
+      const { data: lb, error: lbErr } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("phone", fullPhone)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (!lbErr) lastBefore = lb;
+    } catch (e) {
+      lastBefore = null;
+    }
 
     const aiEnabledForInsert = lastBefore && typeof lastBefore.ai_enabled !== 'undefined' ? lastBefore.ai_enabled : true;
 
