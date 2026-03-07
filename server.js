@@ -350,18 +350,23 @@ app.post("/agent-send-media", async (req, res) => {
   console.log("/agent-send-media body:", req.body)
 
   try {
-    // Build payload expected by BotSpace: top-level media.url and non-empty text
+    // Build payload to match BotSpace webhook schema for media
     const payload = {
       phone: phone,
       name: "Agent",
-      mediaUrl: mediaUrl,
-      caption: caption || ""
+      payload: {
+        type: "image",
+        payload: {
+          url: mediaUrl,
+          caption: caption || ""
+        }
+      }
     }
 
     console.log('BOTSPACE PAYLOAD', payload)
 
     const response = await axios.post(
-      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-media?apiKey=${BOTSPACE_API_KEY}`,
+      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message?apiKey=${BOTSPACE_API_KEY}`,
       payload,
       {
         headers: {
