@@ -132,6 +132,21 @@ async function handleAIResponse(fullPhone, combinedMessage) {
   }
 }
 
+// Helper: upload external media URL to BotSpace and return mediaId
+async function uploadToBotspace(mediaUrl) {
+  try {
+    const resp = await axios.post(
+      `https://public-api.bot.space/v1/${CHANNEL_ID}/media/upload?apiKey=${BOTSPACE_API_KEY}`,
+      { url: mediaUrl },
+      { headers: { 'Content-Type': 'application/json' } }
+    );
+    return resp?.data?.data?.id || null;
+  } catch (err) {
+    console.error('uploadToBotspace error', err.response?.data || err.message || err);
+    return null;
+  }
+}
+
 // Health check
 app.get("/", (req, res) => {
   res.send("Kiddost AI running 🚀");
@@ -160,12 +175,22 @@ app.post("/webhook", async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    const message = req.body?.payload?.payload?.text;
+    // Parse incoming message payloads (text or media)
+    const payloadType = req.body?.payload?.type;
+    let messageText = null;
+    let incomingMediaUrl = null;
+    if (payloadType === 'text') {
+      messageText = req.body?.payload?.payload?.text || null;
+    } else if (payloadType === 'media') {
+      // BotSpace webhook media shape: payload.payload.url
+      incomingMediaUrl = req.body?.payload?.payload?.url || null;
+    }
+
     const countryCode = req.body?.phone?.countryCode;
     const phone = req.body?.phone?.phone;
 
-    if (!message || !countryCode || !phone) {
-      console.log("Missing required fields");
+    if ((!messageText && !incomingMediaUrl) || !countryCode || !phone) {
+      console.log("Missing required fields or empty payload");
       return res.status(200).json({ ok: true });
     }
 
@@ -206,8 +231,9 @@ app.post("/webhook", async (req, res) => {
     await supabase.from("messages").insert({
       phone: fullPhone,
       role: "user",
-      content: message,
+      content: messageText || null,
       sender: "user",
+      media_url: incomingMediaUrl || null,
       ai_enabled: aiEnabledForInsert
     });
 
@@ -345,38 +371,41 @@ app.post("/agent-send", async (req, res) => {
 
 // Endpoint to send media messages from agent and record them
 app.post("/agent-send-media", async (req, res) => {
-  const { phone, mediaUrl, caption } = req.body
+  const { phone, mediaUrl, caption } = req.body;
 
-  console.log("/agent-send-media body:", req.body)
+  console.log("/agent-send-media body:", req.body);
 
   try {
-    // Build payload to match BotSpace webhook schema for media
+    // First upload media to BotSpace and get a mediaId
+    const mediaId = await uploadToBotspace(mediaUrl);
+    if (!mediaId) {
+      console.error('Failed to upload media to BotSpace');
+      return res.status(500).json({ error: 'upload_to_botspace_failed' });
+    }
+
+    // Build final payload referencing the BotSpace media id
     const payload = {
       phone: phone,
       name: "Agent",
-      text: caption || ' ',
       payload: {
-        type: "image",
+        type: "media",
         payload: {
-          url: mediaUrl,
+          mediaId: mediaId,
+          mediaType: "image",
           caption: caption || ""
         }
       }
-    }
+    };
 
-    console.log('BOTSPACE PAYLOAD', payload)
+    console.log('BOTSPACE FINAL PAYLOAD', payload);
 
     const response = await axios.post(
       `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message?apiKey=${BOTSPACE_API_KEY}`,
       payload,
-      {
-        headers: {
-          "Content-Type": "application/json"
-        }
-      }
-    )
+      { headers: { 'Content-Type': 'application/json' } }
+    );
 
-    console.log('BOTSPACE RESPONSE', response.data)
+    console.log('BOTSPACE RESPONSE', response.data);
 
     await supabase.from("messages").insert({
       phone: phone,
@@ -384,16 +413,12 @@ app.post("/agent-send-media", async (req, res) => {
       text: caption || "",
       media_url: mediaUrl,
       whatsapp_id: response?.data?.messageId || response?.data?.id || response?.data?.message_id || null
-    })
+    });
 
-    res.json({ success: true })
-
+    res.json({ success: true });
   } catch (err) {
-
-    console.error("BotSpace media error:", err.response?.data || err)
-
-    res.status(500).json({ error: "Media send failed" })
-
+    console.error("BotSpace media error", err.response?.data || err);
+    res.status(500).json({ error: "Media send failed" });
   }
 });
 
