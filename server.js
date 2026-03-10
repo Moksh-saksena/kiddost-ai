@@ -544,7 +544,9 @@ app.get('/proxy-image', async (req, res) => {
     const contentType = resp.headers['content-type'] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=31536000');
-    return res.send(Buffer.from(resp.data));
+    // Force inline disposition so browser attempts to render instead of download
+    res.setHeader('Content-Disposition', 'inline');
+    return res.end(Buffer.from(resp.data));
   } catch (e) {
     console.error('/proxy-image error', e?.response?.status, e?.message || e);
     return res.status(500).send('proxy error');

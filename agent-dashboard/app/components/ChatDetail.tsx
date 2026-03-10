@@ -191,7 +191,11 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
                     {message.media_url.endsWith('.pdf') ? (
                       <a href={message.media_url} target="_blank" rel="noreferrer" className="text-sm underline">View document</a>
                     ) : (
-                      <img src={message.media_url} alt="media" className="w-48 rounded-md object-cover" />
+                      (() => {
+                        const isBotspace = message.media_url.includes('public-api.bot.space') || message.media_url.includes('bot.space');
+                        const displayUrl = isBotspace ? `https://kiddost-ai.onrender.com/proxy-image?url=${encodeURIComponent(message.media_url)}` : message.media_url;
+                        return <img src={displayUrl} alt="media" className="w-48 rounded-md object-cover" />;
+                      })()
                     )}
                   </div>
                 )}
