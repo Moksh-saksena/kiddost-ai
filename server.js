@@ -154,13 +154,15 @@ app.get("/", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   try {
+    const body = req.body;
+
     console.log("Full incoming body:");
-    console.log(JSON.stringify(req.body, null, 2));
+    console.log(JSON.stringify(body, null, 2));
 
     // Handle delivery / status webhooks from BotSpace / WhatsApp
-    if (req.body?.event === "message-status" || req.body?.event === "message-delivered") {
-      const messageId = req.body?.messageId || req.body?.message_id || req.body?.payload?.messageId;
-      const status = req.body?.status || req.body?.payload?.status || req.body?.delivery_status;
+    if (body?.event === "message-status" || body?.event === "message-delivered") {
+      const messageId = body?.messageId || body?.message_id || body?.payload?.messageId;
+      const status = body?.status || body?.payload?.status || body?.delivery_status;
       if (messageId && status) {
         try {
           await supabase
@@ -175,26 +177,34 @@ app.post("/webhook", async (req, res) => {
       return res.status(200).json({ ok: true });
     }
 
-    // Parse incoming message payloads (text or media)
-    const payloadType = req.body?.payload?.type;
-    let messageText = null;
-    let incomingMediaUrl = null;
-    if (payloadType === 'text') {
-      messageText = req.body?.payload?.payload?.text || null;
-    } else if (payloadType === 'media') {
-      // BotSpace webhook media shape: payload.payload.url
-      incomingMediaUrl = req.body?.payload?.payload?.url || null;
-    }
-
-    const countryCode = req.body?.phone?.countryCode;
-    const phone = req.body?.phone?.phone;
-
-    if ((!messageText && !incomingMediaUrl) || !countryCode || !phone) {
-      console.log("Missing required fields or empty payload");
+    // Extract phone info
+    const countryCode = body?.phone?.countryCode;
+    const phone = body?.phone?.phone;
+    if (!countryCode || !phone) {
+      console.log("Missing phone info");
       return res.status(200).json({ ok: true });
     }
 
     const fullPhone = `+${countryCode}${phone}`;
+
+    // Safely extract message or media
+    let message = null;
+    let mediaUrl = null;
+    if (body.payload?.type === 'text') {
+      message = body.payload?.payload?.text || null;
+    } else if (body.payload?.type === 'media') {
+      mediaUrl = body.payload?.payload?.url || null;
+    }
+
+    console.log("Extracted message:", message);
+    console.log("Extracted media:", mediaUrl);
+    console.log("From:", fullPhone);
+
+    if (!message && !mediaUrl) {
+      console.log("Missing required fields or empty payload");
+      return res.status(200).json({ ok: true });
+    }
+
     const { data: existingConversation } = await supabase
       .from("conversations")
       .select("phone")
@@ -206,8 +216,6 @@ app.post("/webhook", async (req, res) => {
         phone: fullPhone
       });
     }
-    console.log("Extracted message:", message);
-    console.log("From:", fullPhone);
 
     // Determine previous AI state for this conversation
     let lastBefore = null;
@@ -231,27 +239,13 @@ app.post("/webhook", async (req, res) => {
     await supabase.from("messages").insert({
       phone: fullPhone,
       role: "user",
-      content: messageText || null,
+      content: message || null,
       sender: "user",
-      media_url: incomingMediaUrl || null,
+      media_url: mediaUrl || null,
       ai_enabled: aiEnabledForInsert
     });
 
-    // Fetch last 10 messages for conversation memory
-    const { data, error } = await supabase
-      .from("messages")
-      .select("role, content")
-      .eq("phone", fullPhone)
-      .order("created_at", { ascending: false })
-      .limit(10);
-
-    if (error) {
-      console.log("Supabase fetch error:", error);
-    }
-
-    const history = Array.isArray(data) ? data.reverse() : [];
-    // OpenAI response
-    // Before generating AI response, check most recent message's ai_enabled flag
+    // If AI is disabled for this conversation, skip buffering/responding
     const { data: last, error: lastErr } = await supabase
       .from("messages")
       .select("*")
@@ -269,32 +263,33 @@ app.post("/webhook", async (req, res) => {
       return res.status(200).json({ success: true, ai_skipped: true });
     }
 
-    // Buffer this message for a short delay so fragmented messages are combined
-    // into a single prompt for the AI. This helps avoid message fragmentation.
-    if (!messageBuffers[fullPhone]) messageBuffers[fullPhone] = [];
-    messageBuffers[fullPhone].push(message);
+    // Only buffer text messages for AI (ignore pure media for AI)
+    if (message) {
+      if (!messageBuffers[fullPhone]) messageBuffers[fullPhone] = [];
+      messageBuffers[fullPhone].push(message);
 
-    // clear previous timer if any
-    if (messageTimers[fullPhone]) {
-      clearTimeout(messageTimers[fullPhone]);
+      // clear previous timer if any
+      if (messageTimers[fullPhone]) {
+        clearTimeout(messageTimers[fullPhone]);
+      }
+
+      // wait 10 seconds (user requested 10s buffer) before sending combined text to AI
+      messageTimers[fullPhone] = setTimeout(async () => {
+        const combined = (messageBuffers[fullPhone] || []).join(" ").trim();
+        // reset buffer
+        messageBuffers[fullPhone] = [];
+        try {
+          if (combined) {
+            await handleAIResponse(fullPhone, combined);
+          }
+        } catch (e) {
+          console.error('buffered AI handler error', e?.message || e);
+        }
+      }, 10000);
     }
 
-    // wait 10 seconds (user requested 10s buffer) before sending combined text to AI
-    messageTimers[fullPhone] = setTimeout(async () => {
-      const combined = (messageBuffers[fullPhone] || []).join(" ").trim();
-      // reset buffer
-      messageBuffers[fullPhone] = [];
-      try {
-        if (combined) {
-          await handleAIResponse(fullPhone, combined);
-        }
-      } catch (e) {
-        console.error('buffered AI handler error', e?.message || e);
-      }
-    }, 10000);
-
     // respond quickly to webhook sender
-    return res.status(200).json({ success: true, buffered: true });
+    return res.status(200).json({ success: true, buffered: !!message });
 
   } catch (error) {
     console.log("=== ERROR ===");
@@ -376,31 +371,18 @@ app.post("/agent-send-media", async (req, res) => {
   console.log("/agent-send-media body:", req.body);
 
   try {
-    // First upload media to BotSpace and get a mediaId
-    const mediaId = await uploadToBotspace(mediaUrl);
-    if (!mediaId) {
-      console.error('Failed to upload media to BotSpace');
-      return res.status(500).json({ error: 'upload_to_botspace_failed' });
-    }
-
-    // Build final payload referencing the BotSpace media id
     const payload = {
-      phone: phone,
       name: "Agent",
-      payload: {
-        type: "media",
-        payload: {
-          mediaId: mediaId,
-          mediaType: "image",
-          caption: caption || ""
-        }
-      }
+      phone: phone,
+      mediaUrl: mediaUrl,
+      mediaType: "image",
+      label: caption || ""
     };
 
-    console.log('BOTSPACE FINAL PAYLOAD', payload);
+    console.log('BOTSPACE MEDIA PAYLOAD', payload);
 
     const response = await axios.post(
-      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-message?apiKey=${BOTSPACE_API_KEY}`,
+      `https://public-api.bot.space/v1/${CHANNEL_ID}/message/send-session-media-message?apiKey=${BOTSPACE_API_KEY}`,
       payload,
       { headers: { 'Content-Type': 'application/json' } }
     );
@@ -417,8 +399,8 @@ app.post("/agent-send-media", async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("BotSpace media error", err.response?.data || err);
-    res.status(500).json({ error: "Media send failed" });
+    console.error('BotSpace send-media error', err.response?.data || err);
+    res.status(500).json({ error: 'Failed to send media' });
   }
 });
 
