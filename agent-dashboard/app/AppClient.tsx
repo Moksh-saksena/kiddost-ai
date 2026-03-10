@@ -85,6 +85,7 @@ export default function AppClient() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages" },
         (payload) => {
+          console.log('realtime payload:', payload);
           const msg = payload.new;
           if (msg.phone === selectedChat) {
             const mapped = {
