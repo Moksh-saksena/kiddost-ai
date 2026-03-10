@@ -528,6 +528,28 @@ app.get('/debug-messages', async (req, res) => {
     return res.status(500).json({ error: true });
   }
 });
+
+// Proxy image endpoint for non-public media (temporary fallback)
+app.get('/proxy-image', async (req, res) => {
+  try {
+    const url = req.query.url;
+    if (!url || typeof url !== 'string') return res.status(400).send('missing url');
+
+    // Only allow known media host(s) for safety
+    const allowedHosts = ['public-api.bot.space'];
+    const parsed = new URL(url);
+    if (!allowedHosts.includes(parsed.hostname)) return res.status(403).send('forbidden host');
+
+    const resp = await axios.get(url, { responseType: 'arraybuffer' });
+    const contentType = resp.headers['content-type'] || 'application/octet-stream';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000');
+    return res.send(Buffer.from(resp.data));
+  } catch (e) {
+    console.error('/proxy-image error', e?.response?.status, e?.message || e);
+    return res.status(500).send('proxy error');
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
