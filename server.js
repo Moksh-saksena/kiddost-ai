@@ -392,7 +392,7 @@ app.post("/agent-send-media", async (req, res) => {
     await supabase.from("messages").insert({
       phone: phone,
       sender: "agent",
-      text: caption || "",
+      content: caption || "",
       media_url: mediaUrl,
       whatsapp_id: response?.data?.messageId || response?.data?.id || response?.data?.message_id || null
     });
