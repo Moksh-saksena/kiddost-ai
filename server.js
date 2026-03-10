@@ -511,6 +511,20 @@ app.post('/toggle-ai', async (req, res) => {
     res.status(500).json({ error: true });
   }
 });
+// Debug endpoint: return recent messages (for troubleshooting frontend visibility)
+app.get('/debug-messages', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, phone, content, media_url, whatsapp_id, status, sender, role, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    return res.json({ data, error });
+  } catch (e) {
+    console.error('/debug-messages error', e?.message || e);
+    return res.status(500).json({ error: true });
+  }
+});
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
