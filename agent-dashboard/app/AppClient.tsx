@@ -22,8 +22,10 @@ export default function AppClient() {
   };
 
   const loadChats = async () => {
-    const { data } = await supabase.from("messages").select("phone, content, created_at").order("created_at", { ascending: false });
-    if (!data) return;
+    const { data, error } = await supabase.from("messages").select("phone, content, created_at").order("created_at", { ascending: false });
+    console.log('loadChats result', { data, error });
+    if (error) return;
+    if (!data || data.length === 0) return setChats([]);
 
     const map = new Map();
     for (const row of data) {
@@ -43,8 +45,10 @@ export default function AppClient() {
   };
 
   const loadMessages = async (phone: string) => {
-    const { data } = await supabase.from("messages").select("*").eq("phone", phone).order("created_at", { ascending: true });
-    if (!data) return;
+    const { data, error } = await supabase.from("messages").select("*").eq("phone", phone).order("created_at", { ascending: true });
+    console.log('loadMessages result', { phone, data, error });
+    if (error) return;
+    if (!data) return setMessages([]);
     const msgs: Message[] = data.map((m: any) => ({
       id: String(m.id || m.created_at),
       text: m.content || m.text || '',
@@ -112,6 +116,16 @@ export default function AppClient() {
     };
   }, [selectedChat]);
 
+  // Polling fallback: refresh chats/messages every 5s
+  useEffect(() => {
+    const iv = setInterval(() => {
+      loadChats();
+      if (selectedChat) loadMessages(selectedChat);
+    }, 5000);
+
+    return () => clearInterval(iv);
+  }, [selectedChat]);
+
   const currentChat = chats.find((c) => c.id === selectedChat);
 
   return (
@@ -130,12 +144,18 @@ export default function AppClient() {
           onSend={sendMessage}
         />
       ) : (
-        <ChatList
-          onSelectChat={(chatId) => setSelectedChat(chatId)}
-          isDarkMode={isDarkMode}
-          onToggleTheme={() => setIsDarkMode(!isDarkMode)}
-          chats={chats}
-        />
+        chats.length === 0 ? (
+          <div style={{ padding: 40, color: isDarkMode ? '#fff' : '#000', textAlign: 'center' }}>
+            No chats yet — check DevTools console for errors.
+          </div>
+        ) : (
+          <ChatList
+            onSelectChat={(chatId) => setSelectedChat(chatId)}
+            isDarkMode={isDarkMode}
+            onToggleTheme={() => setIsDarkMode(!isDarkMode)}
+            chats={chats}
+          />
+        )
       )}
       <div ref={bottomRef} />
     </div>
