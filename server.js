@@ -855,13 +855,11 @@ Goal: Make the user feel like they are chatting with a real human agent and move
       const notes = (convVars && convVars.notes && typeof convVars.notes === 'object') ? convVars.notes : {};
       const children = Array.isArray(allChildren) ? allChildren : [];
 
-      const hasChildName = children.some(c => !!(c && c.name));
       const hasChildAge = children.some(c => c && c.age != null);
       const hasParentName = Boolean(notes.parentName || notes.parent || notes.customerName || notes.name);
       const hasLocation = Boolean(notes.location || notes.area || notes.locality || notes.address);
 
       const missing = [];
-      if (!hasChildName) missing.push("child's name");
       if (!hasChildAge) missing.push("child's age");
       if (!hasParentName) missing.push('your name');
       if (!hasLocation) missing.push('your area/locality');
