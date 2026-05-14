@@ -402,17 +402,25 @@ async function handleAIResponse(fullPhone, combinedMessage, options = {}) {
 
     const history = Array.isArray(data) ? data.reverse() : [];
 
-    // Load conversation variables (child names/ages stored across messages)
+    // Load conversation variables AND ai_paused flag
     let convVars = {};
+    let conversationAiPaused = false;
     try {
       const { data: convData } = await supabase
         .from('conversations')
-        .select('vars')
+        .select('vars, ai_paused')
         .eq('phone', fullPhone)
         .maybeSingle();
       convVars = convData?.vars || {};
+      conversationAiPaused = convData?.ai_paused === true;
     } catch (e) {
       console.log('[vars] failed to load:', e.message);
+    }
+
+    // Check conversation-level ai_paused flag FIRST (most reliable)
+    if (conversationAiPaused) {
+      console.log('AI paused for this conversation (conversations.ai_paused=true) — skipping');
+      return;
     }
 
     // Before generating AI response, check most recent message's ai_enabled flag
@@ -427,7 +435,15 @@ async function handleAIResponse(fullPhone, combinedMessage, options = {}) {
     if (lastErr) console.log("Supabase fetch error:", lastErr);
 
     if (last && last.ai_enabled === false) {
-      console.log("AI disabled for this conversation (buffered)");
+      console.log('AI disabled for this conversation (last message ai_enabled=false)');
+      return;
+    }
+
+    // Safety net: check if an agent has sent a message in this conversation's recent history
+    // If so, AI should NOT respond — the human has taken over
+    const recentAgentMsg = history.find(m => m.role === 'assistant' && m.sender === 'agent');
+    if (recentAgentMsg) {
+      console.log(`AI skipped — agent message found in recent history (agent: ${recentAgentMsg.agent || 'unknown'})`);
       return;
     }
 
@@ -613,10 +629,19 @@ CRITICAL RULES:
 - NEVER ask for the child's age if it was ALREADY mentioned earlier in the conversation or in KNOWN FACTS. Read the full history before responding.
 - NEVER repeat information you have already given. If you already shared activities, pricing, or introductory session details earlier in the conversation, do NOT repeat them. Just answer the new question directly.
 - If the child's name is shared voluntarily, remember it and use it naturally later.
-- Only include "Feel free to let us know if you have any questions." when you are finishing a substantial info block (pricing/activities). Do NOT add it to every single message.
+- Only include "Feel free to let us know if you have any questions." ONCE, at the end of the FIRST pricing/activities info block you send. NEVER use it again in the same conversation. NEVER use it as a sign-off or farewell.
 - ONLY answer questions that are explicitly covered in the RESPONSE PLAYBOOK below. If a question is not covered, reply UNSURE.
 - Do NOT improvise, fabricate, assume, or fill gaps with your own knowledge. You only know what is written in this prompt and the conversation history.
 - When in doubt, ALWAYS err on the side of saying UNSURE. A wrong answer is far worse than deferring to a human agent.
+
+HARD NEVER-DO LIST (violations are critical failures):
+- NEVER mention or ask for society gate codes, entry codes, building access codes, or apartment entry procedures
+- NEVER share any phone number, email, or contact detail that is not EXPLICITLY written in this prompt
+- NEVER confirm a booking. You CANNOT confirm bookings. You can only collect details and say "allow me to check the slot availability"
+- NEVER say "your session is confirmed" or "your booking is confirmed" or "we are looking to schedule" — you do not have the authority to confirm anything
+- NEVER invent operational details like member names, arrival procedures, payment links, or logistics
+- NEVER say "Yes, we do service in [area]" — you cannot verify locations, always defer to human
+- If you catch yourself about to say something not in this prompt, say UNSURE instead
 
 IMPORTANT — UNSURE threshold:
 - If you are not 100% certain your answer is correct based on THIS prompt, reply with ONLY the single word: UNSURE
@@ -732,21 +757,42 @@ GROUP / SIBLING SESSIONS:
 - A human agent will follow up with group/sibling session details.
 
 TIME SLOT REQUEST:
-- Once you have the parent's name AND preferred date/time, say EXACTLY: "Sure, allow me to check the slot availability and come back to you."
+- Once you have the parent's name AND preferred date/time AND area/locality, say EXACTLY: "Sure, allow me to check the slot availability and come back to you."
 - CRITICAL: The UNSURE rule ONLY activates after you have sent this EXACT check-availability message. NOT before.
-- After you have said "allow me to check the slot availability and come back to you", you must STOP. If the user replies with ANYTHING after that (e.g. "Sure", "Ok", "Thanks", a name, a time), respond with ONLY the word: UNSURE
+- After you have said "allow me to check the slot availability and come back to you", you must STOP. If the user replies with ANYTHING after that (e.g. "Sure", "Ok", "Thanks", a name, a time, "any luck?", "hi", "any update?"), respond with ONLY the word: UNSURE
 - Do NOT fabricate availability confirmations. You cannot actually check calendars. A human agent will respond once they have checked.
-- If the conversation history shows you already said "allow me to check the slot availability" and no human agent has confirmed yet, reply UNSURE.
+- If the conversation history shows you already said "allow me to check the slot availability" or "let me check" and no human agent has confirmed yet, reply UNSURE.
+- NEVER confirm or summarize booking details (e.g. "Just to confirm, we are looking to schedule..."). You do NOT have the authority to confirm. Only collect info and hand off.
+- NEVER ask for entry codes, gate codes, society access details, or any logistics. That is handled by the operations team after booking.
 
 LOCATION / SERVICEABILITY:
-We operate in Bangalore only with 3 service hubs (Marathahalli ~6km, Jayanagar ~10km, Electronic City ~3km).
-The system automatically geocodes the user's location and injects a LOCATION VERIFIED message above. Follow it:
-- If you see "LOCATION VERIFIED ✅" → confirm to the user: "Yes, we do service in [area]! 😊" and continue normally.
-- If you see "LOCATION VERIFIED ❌" → say EXACTLY: "Let me check if we can service your area and get back to you." Then STOP. If the user replies anything after that, respond UNSURE.
-- If NO location check was injected (user didn't mention a place) and they ask "do you service in X?", ask them to share their area name and you will check.
-- If the user mentions ANY city/area other than Bangalore (e.g. Mysore, Chennai, Mumbai, Pune, Hyderabad, etc.) → NEVER say "yes we service there". Say EXACTLY: "Currently we operate only in Bangalore. We're expanding soon — would you like us to notify you when we're available in your area?" — this is NON-NEGOTIABLE.
-- During the BEFORE BOOKING flow, after collecting parent name / preferred time, also ask for their area/locality if not already known: "Could you also share your area or locality so I can confirm we service your location?"
-- Do NOT fabricate serviceability. Only confirm when you see a LOCATION VERIFIED ✅ system message.
+We operate in Bangalore (Bengaluru) ONLY. No other city.
+
+RULE 1 — NON-BANGALORE CITY DETECTED:
+- If the system injects a "NON-BANGALORE CITY DETECTED" message above, or if you yourself can tell the user mentioned a city/area/state that is NOT Bangalore/Bengaluru (e.g. Mumbai, Delhi, Kolkata, Chennai, Hyderabad, Pune, Nagpur, Mysore, Jaipur, Lucknow, Ahmedabad, Kochi, Goa, Noida, Gurgaon, Chandigarh, Indore, Bhopal, Patna, Coimbatore, Vizag, Mangalore, or ANY other non-Bangalore location), say EXACTLY:
+  "Currently we operate only in Bangalore. We're expanding soon — would you like us to notify you when we're available in your area?"
+  Then STOP. If the user replies after that, respond UNSURE.
+  This is NON-NEGOTIABLE. NEVER say "yes we service there" for any non-Bangalore city.
+
+RULE 2 — PINCODES:
+- If the user shares a pincode (any 6-digit number), do NOT try to verify it. Respond UNSURE. A human agent will check.
+
+RULE 3 — BANGALORE AREAS:
+- If the user mentions an area/locality within Bangalore (e.g. Koramangala, BTM, Whitefield, HSR Layout, Indiranagar, JP Nagar, Marathahalli, Electronic City, Jayanagar, etc.), say EXACTLY:
+  "Let me check if we can service your area and get back to you."
+  Then STOP. If the user replies after that, respond UNSURE. A human agent will confirm.
+- NEVER confirm serviceability yourself. You cannot verify areas. Always defer to human.
+
+RULE 4 — GOOGLE MAPS LINKS:
+- If the user shares a Google Maps link, say: "Let me check if we can service your area and get back to you." Then STOP. Respond UNSURE to follow-ups.
+
+RULE 5 — UNKNOWN / AMBIGUOUS LOCATION:
+- If you are not 100% sure whether the location is in Bangalore or not, respond UNSURE.
+- NEVER guess. NEVER assume. NEVER auto-confirm any location.
+
+RULE 6 — ASKING FOR LOCATION:
+- During the BEFORE BOOKING flow, after collecting parent name / preferred time, ask for their area/locality if not already known: "Could you also share your area or locality so I can confirm we service your location?"
+- Once they share it, follow Rules 1-5 above.
 ---
 
 Goal: Make the user feel like they are chatting with a real human agent and move them towards booking an introductory session.` +
@@ -759,44 +805,42 @@ Goal: Make the user feel like they are chatting with a real human agent and move
       { role: "user", content: userMessageForAI }
     ];
 
-    // ── Location serviceability check (geocoding) ────────────────────────
-    // Detect if user is asking about location/area and inject verified result
-    // First check if the message contains a Google Maps URL
-    const mapsUrlInMsg = combinedMessage.match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps)\S+/i);
-    let locationCheckResult = null;
-    if (mapsUrlInMsg) {
-      locationCheckResult = await checkLocationServiceability(mapsUrlInMsg[0]);
-      if (locationCheckResult) {
-        console.log(`[Location Check] Maps URL → ${JSON.stringify(locationCheckResult)}`);
-      }
-    } else {
-      const locationPatterns = [
-        /(?:do you|can you|are you).*(?:service|serve|cover|come to|operate|available)\s+(?:in|at|near|around)\s+(.+)/i,
-        /(?:service|serve|cover|available).*(?:in|at|near)\s+(?!tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(.+)/i,
-        /(?:we are|we're|i am|i'm|i live|we live|located|staying|stay)\s+(?:in|at|near|around)\s+(?!tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(.+)/i,
-        /(?:my (?:area|location|place|locality|address) is|i'm from|we're from)\s+(?!tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(.+)/i,
-        /(?:our (?:area|location|place|locality|address) is)\s+(?!tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(.+)/i,
-        /(?:what about|how about)\s+(?!tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(.+?)(?:\s*\?|$)/i,
-      ];
-      for (const pat of locationPatterns) {
-        const m = combinedMessage.match(pat);
-        if (m && m[1]) {
-          const locationText = m[1].replace(/[?.!]+$/, '').trim();
-          if (locationText.length >= 3 && locationText.length <= 100) {
-            locationCheckResult = await checkLocationServiceability(locationText);
-            if (locationCheckResult) {
-              console.log(`[Location Check] "${locationText}" → ${JSON.stringify(locationCheckResult)}`);
-            }
-            break;
-          }
-        }
+    // ── Location check: simple non-Bangalore city detector ──────────────
+    // NO geocoding. NO pincode lookup. NO distance checks.
+    // Only detect obvious non-Bangalore cities and inject a rejection hint.
+    const NON_BANGALORE_CITIES = [
+      'mumbai', 'delhi', 'kolkata', 'chennai', 'hyderabad', 'pune', 'ahmedabad',
+      'jaipur', 'lucknow', 'kanpur', 'nagpur', 'indore', 'bhopal', 'patna',
+      'vadodara', 'ludhiana', 'agra', 'nashik', 'varanasi', 'srinagar',
+      'coimbatore', 'kochi', 'cochin', 'trivandrum', 'thiruvananthapuram',
+      'vizag', 'visakhapatnam', 'mangalore', 'mangaluru', 'mysore', 'mysuru',
+      'goa', 'noida', 'gurgaon', 'gurugram', 'chandigarh', 'dehradun',
+      'ranchi', 'guwahati', 'bhubaneswar', 'raipur', 'amritsar', 'jodhpur',
+      'madurai', 'meerut', 'rajkot', 'surat', 'thane', 'navi mumbai',
+      'faridabad', 'ghaziabad', 'howrah', 'salem', 'tiruchirappalli',
+      'hubli', 'belgaum', 'belagavi', 'shimoga', 'davangere', 'gulbarga',
+      'tumkur', 'udupi', 'hassan', 'mandya', 'raichur', 'bellary',
+      'new delhi', 'old delhi', 'south delhi', 'north delhi', 'east delhi', 'west delhi',
+      'greater noida', 'dwarka', 'rohini', 'saket', 'lajpat nagar',
+      'andheri', 'bandra', 'juhu', 'powai', 'borivali', 'dadar', 'worli',
+      'miyapur', 'gachibowli', 'hitech city', 'madhapur', 'secunderabad',
+      'anna nagar', 'adyar', 't nagar', 'velachery', 'tambaram',
+      'salt lake', 'park street', 'rajarhat', 'dum dum',
+      'hinjewadi', 'kothrud', 'wakad', 'hadapsar', 'viman nagar',
+    ];
+    const msgLower = combinedMessage.toLowerCase();
+    let detectedNonBangaloreCity = null;
+    for (const city of NON_BANGALORE_CITIES) {
+      // Match whole word (with word boundaries) to avoid false positives
+      const regex = new RegExp(`\\b${city.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
+      if (regex.test(msgLower)) {
+        detectedNonBangaloreCity = city;
+        break;
       }
     }
-    if (locationCheckResult) {
-      const locMsg = locationCheckResult.serviceable
-        ? `LOCATION VERIFIED ✅: "${locationCheckResult.address}" is SERVICEABLE — ${locationCheckResult.distance} km from ${locationCheckResult.hub} hub (within radius). You can confidently confirm this area.`
-        : `LOCATION VERIFIED ❌: "${locationCheckResult.address}" is NOT SERVICEABLE — nearest hub is ${locationCheckResult.nearestHub} (${locationCheckResult.distance} km away, outside radius). Defer to human agent: "Let me check if we can service your area and get back to you."`;
-      messagesForAI.splice(-1, 0, { role: "system", content: locMsg });
+    if (detectedNonBangaloreCity) {
+      console.log(`[Location Check] Non-Bangalore city detected: "${detectedNonBangaloreCity}" — injecting rejection`);
+      messagesForAI.splice(-1, 0, { role: "system", content: `NON-BANGALORE CITY DETECTED: The user mentioned "${detectedNonBangaloreCity}". This is NOT in Bangalore. You MUST reject: "Currently we operate only in Bangalore. We're expanding soon — would you like us to notify you when we're available in your area?" Do NOT proceed with booking. Do NOT ask for more details.` });
     }
 
     const aiResponse = await axios.post(
@@ -1511,8 +1555,23 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (last && last.ai_enabled === false) {
-      console.log("AI disabled for this conversation");
+      console.log('AI disabled for this conversation');
       return res.status(200).json({ success: true, ai_skipped: true });
+    }
+
+    // Also check conversations table ai_paused flag (more reliable than message-level)
+    try {
+      const { data: convCheck } = await supabase
+        .from('conversations')
+        .select('ai_paused')
+        .eq('phone', fullPhone)
+        .maybeSingle();
+      if (convCheck?.ai_paused === true) {
+        console.log('AI paused for this conversation (conversations.ai_paused=true)');
+        return res.status(200).json({ success: true, ai_skipped: true });
+      }
+    } catch (e) {
+      console.log('[webhook] ai_paused check error:', e.message);
     }
 
     // Only buffer text messages for AI (ignore pure media for AI, and skip for brand-new users)
@@ -1885,10 +1944,19 @@ CRITICAL RULES:
 - NEVER ask for the child's age if it was ALREADY mentioned earlier in the conversation or in KNOWN FACTS. Read the full history before responding.
 - NEVER repeat information you have already given. If you already shared activities, pricing, or introductory session details earlier in the conversation, do NOT repeat them. Just answer the new question directly.
 - If the child's name is shared voluntarily, remember it and use it naturally later.
-- Only include "Feel free to let us know if you have any questions." when you are finishing a substantial info block (pricing/activities). Do NOT add it to every single message.
+- Only include "Feel free to let us know if you have any questions." ONCE, at the end of the FIRST pricing/activities info block you send. NEVER use it again in the same conversation. NEVER use it as a sign-off or farewell.
 - ONLY answer questions that are explicitly covered in the RESPONSE PLAYBOOK below. If a question is not covered, reply UNSURE.
 - Do NOT improvise, fabricate, assume, or fill gaps with your own knowledge. You only know what is written in this prompt and the conversation history.
 - When in doubt, ALWAYS err on the side of saying UNSURE. A wrong answer is far worse than deferring to a human agent.
+
+HARD NEVER-DO LIST (violations are critical failures):
+- NEVER mention or ask for society gate codes, entry codes, building access codes, or apartment entry procedures
+- NEVER share any phone number, email, or contact detail that is not EXPLICITLY written in this prompt
+- NEVER confirm a booking. You CANNOT confirm bookings. You can only collect details and say "allow me to check the slot availability"
+- NEVER say "your session is confirmed" or "your booking is confirmed" or "we are looking to schedule" — you do not have the authority to confirm anything
+- NEVER invent operational details like member names, arrival procedures, payment links, or logistics
+- NEVER say "Yes, we do service in [area]" — you cannot verify locations, always defer to human
+- If you catch yourself about to say something not in this prompt, say UNSURE instead
 
 IMPORTANT — UNSURE threshold:
 - If you are not 100% certain your answer is correct based on THIS prompt, reply with ONLY the single word: UNSURE
@@ -2004,21 +2072,42 @@ GROUP / SIBLING SESSIONS:
 - A human agent will follow up with group/sibling session details.
 
 TIME SLOT REQUEST:
-- Once you have the parent's name AND preferred date/time, say EXACTLY: "Sure, allow me to check the slot availability and come back to you."
+- Once you have the parent's name AND preferred date/time AND area/locality, say EXACTLY: "Sure, allow me to check the slot availability and come back to you."
 - CRITICAL: The UNSURE rule ONLY activates after you have sent this EXACT check-availability message. NOT before.
-- After you have said "allow me to check the slot availability and come back to you", you must STOP. If the user replies with ANYTHING after that (e.g. "Sure", "Ok", "Thanks", a name, a time), respond with ONLY the word: UNSURE
+- After you have said "allow me to check the slot availability and come back to you", you must STOP. If the user replies with ANYTHING after that (e.g. "Sure", "Ok", "Thanks", a name, a time, "any luck?", "hi", "any update?"), respond with ONLY the word: UNSURE
 - Do NOT fabricate availability confirmations. You cannot actually check calendars. A human agent will respond once they have checked.
-- If the conversation history shows you already said "allow me to check the slot availability" and no human agent has confirmed yet, reply UNSURE.
+- If the conversation history shows you already said "allow me to check the slot availability" or "let me check" and no human agent has confirmed yet, reply UNSURE.
+- NEVER confirm or summarize booking details (e.g. "Just to confirm, we are looking to schedule..."). You do NOT have the authority to confirm. Only collect info and hand off.
+- NEVER ask for entry codes, gate codes, society access details, or any logistics. That is handled by the operations team after booking.
 
 LOCATION / SERVICEABILITY:
-We operate in Bangalore only with 3 service hubs (Marathahalli ~6km, Jayanagar ~10km, Electronic City ~3km).
-The system automatically geocodes the user's location and injects a LOCATION VERIFIED message above. Follow it:
-- If you see "LOCATION VERIFIED ✅" → confirm to the user: "Yes, we do service in [area]! 😊" and continue normally.
-- If you see "LOCATION VERIFIED ❌" → say EXACTLY: "Let me check if we can service your area and get back to you." Then STOP. If the user replies anything after that, respond UNSURE.
-- If NO location check was injected (user didn't mention a place) and they ask "do you service in X?", ask them to share their area name and you will check.
-- If the user mentions ANY city/area other than Bangalore (e.g. Mysore, Chennai, Mumbai, Pune, Hyderabad, etc.) → NEVER say "yes we service there". Say EXACTLY: "Currently we operate only in Bangalore. We're expanding soon — would you like us to notify you when we're available in your area?" — this is NON-NEGOTIABLE.
-- During the BEFORE BOOKING flow, after collecting parent name / preferred time, also ask for their area/locality if not already known: "Could you also share your area or locality so I can confirm we service your location?"
-- Do NOT fabricate serviceability. Only confirm when you see a LOCATION VERIFIED ✅ system message.
+We operate in Bangalore (Bengaluru) ONLY. No other city.
+
+RULE 1 — NON-BANGALORE CITY DETECTED:
+- If the system injects a "NON-BANGALORE CITY DETECTED" message above, or if you yourself can tell the user mentioned a city/area/state that is NOT Bangalore/Bengaluru (e.g. Mumbai, Delhi, Kolkata, Chennai, Hyderabad, Pune, Nagpur, Mysore, Jaipur, Lucknow, Ahmedabad, Kochi, Goa, Noida, Gurgaon, Chandigarh, Indore, Bhopal, Patna, Coimbatore, Vizag, Mangalore, or ANY other non-Bangalore location), say EXACTLY:
+  "Currently we operate only in Bangalore. We're expanding soon — would you like us to notify you when we're available in your area?"
+  Then STOP. If the user replies after that, respond UNSURE.
+  This is NON-NEGOTIABLE. NEVER say "yes we service there" for any non-Bangalore city.
+
+RULE 2 — PINCODES:
+- If the user shares a pincode (any 6-digit number), do NOT try to verify it. Respond UNSURE. A human agent will check.
+
+RULE 3 — BANGALORE AREAS:
+- If the user mentions an area/locality within Bangalore (e.g. Koramangala, BTM, Whitefield, HSR Layout, Indiranagar, JP Nagar, Marathahalli, Electronic City, Jayanagar, etc.), say EXACTLY:
+  "Let me check if we can service your area and get back to you."
+  Then STOP. If the user replies after that, respond UNSURE. A human agent will confirm.
+- NEVER confirm serviceability yourself. You cannot verify areas. Always defer to human.
+
+RULE 4 — GOOGLE MAPS LINKS:
+- If the user shares a Google Maps link, say: "Let me check if we can service your area and get back to you." Then STOP. Respond UNSURE to follow-ups.
+
+RULE 5 — UNKNOWN / AMBIGUOUS LOCATION:
+- If you are not 100% sure whether the location is in Bangalore or not, respond UNSURE.
+- NEVER guess. NEVER assume. NEVER auto-confirm any location.
+
+RULE 6 — ASKING FOR LOCATION:
+- During the BEFORE BOOKING flow, after collecting parent name / preferred time, ask for their area/locality if not already known: "Could you also share your area or locality so I can confirm we service your location?"
+- Once they share it, follow Rules 1-5 above.
 ---
 ` +
       `Goal: Make the user feel like they are chatting with a real human agent and move them towards booking an introductory session.` +
