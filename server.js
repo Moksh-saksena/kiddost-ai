@@ -1543,8 +1543,28 @@ app.post("/webhook", async (req, res) => {
     if (userInsertError) console.error('/webhook user insert error', userInsertError.message, { storedMediaUrl });
 
     // Do not push on every inbound message.
-    // Push alerts are sent only from agent-needed paths (UNSURE / human-handoff patterns).
- 
+    // Push alerts are sent only from agent-needed paths (UNSURE / human-handoff patterns), 
+    // EXCEPT for engagement tracking: notify when user sends their 2nd or 5th message.
+    try {
+      const { count: userMsgCount } = await supabase
+        .from("messages")
+        .select("*", { count: 'exact', head: true })
+        .eq("phone", fullPhone)
+        .eq("sender", "user");
+
+      if (userMsgCount === 2 || userMsgCount === 5) {
+        const contactName = body?.contacts?.[0]?.profile?.name || fullPhone;
+        sendPushToAll({
+          title: `Active Conversation: ${contactName}`,
+          body: `User has sent their ${userMsgCount === 2 ? '2nd' : '5th'} message and is actively engaging with the AI.`,
+          phone: fullPhone,
+          icon: "/icon-192.png"
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.log('Failed to count messages for push notification', e.message);
+    }
+
     // If AI is disabled for this conversation, skip buffering/respon
     const { data: last, error: lastErr } = await supabase
       .from("messages")
