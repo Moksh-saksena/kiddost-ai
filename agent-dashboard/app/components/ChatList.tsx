@@ -20,6 +20,7 @@ interface Chat {
   labels?: string[];
   pinned?: boolean;
   needsHuman?: boolean;
+  lastMsgAt?: string | null;
 }
 
 interface ChatListProps {
