@@ -292,7 +292,7 @@ export function ChatList({ onSelectChat, isDarkMode, onToggleTheme, onLogout, on
                 value={newPhone}
                 onChange={e => { setNewPhone(e.target.value); setNewConvoError(''); }}
                 placeholder="9606746900 or +919606746900"
-                className={`w-full rounded-xl px-4 py-3 text-sm outline-none ${
+                className={`w-full rounded-xl px-4 py-3 text-base outline-none ${
                   isDarkMode ? 'bg-gray-800 border border-blue-500/30 text-white placeholder:text-gray-600 focus:border-blue-500' : 'bg-gray-100 border border-gray-200 text-gray-900 focus:border-[#008069]'
                 }`}
               />

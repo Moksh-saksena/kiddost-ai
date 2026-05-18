@@ -738,7 +738,7 @@ export default function AppClient() {
               onChange={(e) => setDeletePin(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleDeleteAccount()}
               maxLength={8}
-              className={`w-full rounded-xl px-4 py-3 text-sm outline-none mb-3 ${isDarkMode ? 'bg-gray-800 text-white border border-gray-700 focus:border-red-500' : 'bg-gray-100 text-gray-900 border border-gray-200 focus:border-red-400'}`}
+              className={`w-full rounded-xl px-4 py-3 text-base outline-none mb-3 ${isDarkMode ? 'bg-gray-800 text-white border border-gray-700 focus:border-red-500' : 'bg-gray-100 text-gray-900 border border-gray-200 focus:border-red-400'}`}
             />
             {deleteError && <p className="text-red-500 text-xs mb-3">{deleteError}</p>}
             <div className="flex gap-3">

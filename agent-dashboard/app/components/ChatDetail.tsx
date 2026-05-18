@@ -480,7 +480,7 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
                 value={contactName}
                 onChange={e => setContactName(e.target.value)}
                 placeholder="e.g. Rahul Sharma"
-                className={`w-full rounded-xl px-4 py-3 text-sm outline-none transition-all ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600 focus:border-blue-500' : 'bg-gray-100 border border-gray-200 text-gray-900 focus:border-[#008069]'}`}
+                className={`w-full rounded-xl px-4 py-3 text-base outline-none transition-all ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600 focus:border-blue-500' : 'bg-gray-100 border border-gray-200 text-gray-900 focus:border-[#008069]'}`}
               />
             </div>
             {/* Notes */}
@@ -491,7 +491,7 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
                 onChange={e => setContactNotes(e.target.value)}
                 placeholder="Add any notes about this customer..."
                 rows={4}
-                className={`w-full rounded-xl px-4 py-3 text-sm outline-none resize-none transition-all ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600 focus:border-blue-500' : 'bg-gray-100 border border-gray-200 text-gray-900 focus:border-[#008069]'}`}
+                className={`w-full rounded-xl px-4 py-3 text-base outline-none resize-none transition-all ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600 focus:border-blue-500' : 'bg-gray-100 border border-gray-200 text-gray-900 focus:border-[#008069]'}`}
               />
             </div>
             {/* Labels */}
@@ -521,7 +521,7 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
                     }
                   }}
                   placeholder="Type label + Enter"
-                  className={`flex-1 rounded-xl px-3 py-2 text-sm outline-none ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600' : 'bg-gray-100 border border-gray-200 text-gray-900'}`}
+                  className={`flex-1 rounded-xl px-3 py-2 text-base outline-none ${ isDarkMode ? 'bg-gray-900 border border-blue-500/30 text-white placeholder:text-gray-600' : 'bg-gray-100 border border-gray-200 text-gray-900'}`}
                 />
                 <button
                   onClick={() => {
@@ -757,20 +757,20 @@ export function ChatDetail({ chatId, onBack, isDarkMode, messages: propMessages 
         </div>
       )}
 
-      <div className={`px-4 py-3 flex items-center gap-3 relative z-10 ${isDarkMode ? "bg-gradient-to-t from-gray-900 to-black border-t border-blue-900/30" : "bg-[#f0f0f0]"}`}>
-        <label className="cursor-pointer">
+      <div className={`px-4 py-3 flex items-end gap-3 relative z-10 ${isDarkMode ? "bg-gradient-to-t from-gray-900 to-black border-t border-blue-900/30" : "bg-[#f0f0f0]"}`}>
+        <label className="cursor-pointer mb-1.5">
           <input type="file" onChange={uploadMedia} className="hidden" />
           <div className={`px-3 py-2 rounded-full ${isDarkMode ? 'bg-gray-800 text-white' : 'bg-white text-gray-700'}`}>+</div>
         </label>
         <button
           onClick={openTemplateModal}
           title="Send Template"
-          className={`p-2 rounded-full transition-all flex-shrink-0 ${isDarkMode ? 'bg-gray-800 text-blue-400 hover:bg-gray-700' : 'bg-white text-[#008069] hover:bg-gray-100'}`}
+          className={`p-2 mb-1 rounded-full transition-all flex-shrink-0 ${isDarkMode ? 'bg-gray-800 text-blue-400 hover:bg-gray-700' : 'bg-white text-[#008069] hover:bg-gray-100'}`}
         >
           <FileText className="w-5 h-5" />
         </button>
-        <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyPress={handleKeyPress} placeholder={isDarkMode ? "Transmit message..." : "Type a message"} className={`flex-1 rounded-full px-5 py-3 outline-none text-sm ${isDarkMode ? "bg-gray-900/70 border border-blue-500/30 text-gray-100 placeholder:text-gray-600 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 backdrop-blur-sm" : "bg-white text-gray-900"} transition-all`} />
-        <button onClick={handleSend} disabled={sendCooldown} className={`p-3 rounded-full active:scale-95 transition-all ${sendCooldown ? 'opacity-40 cursor-not-allowed' : ''} ${isDarkMode ? "bg-gradient-to-r from-blue-800 to-blue-700 text-white hover:from-blue-700 hover:to-blue-600" : "bg-[#008069] text-white hover:bg-[#017a5f]"}`} style={isDarkMode ? { boxShadow: "0 0 15px rgba(37, 99, 235, 0.3)" } : {}}>
+        <textarea rows={3} value={inputValue} onChange={(e) => setInputValue(e.target.value)} onKeyPress={handleKeyPress} placeholder={isDarkMode ? "Transmit message..." : "Type a message"} className={`flex-1 rounded-2xl px-4 py-2.5 outline-none text-base resize-none ${isDarkMode ? "bg-gray-900/70 border border-blue-500/30 text-gray-100 placeholder:text-gray-600 focus:border-blue-500/60 focus:ring-2 focus:ring-blue-500/20 backdrop-blur-sm" : "bg-white border border-gray-300 text-gray-900 focus:border-[#008069] focus:ring-2 focus:ring-[#008069]/20"} transition-all`} />
+        <button onClick={handleSend} disabled={sendCooldown} className={`p-3 mb-1 rounded-full active:scale-95 transition-all ${sendCooldown ? 'opacity-40 cursor-not-allowed' : ''} ${isDarkMode ? "bg-gradient-to-r from-blue-800 to-blue-700 text-white hover:from-blue-700 hover:to-blue-600" : "bg-[#008069] text-white hover:bg-[#017a5f]"}`} style={isDarkMode ? { boxShadow: "0 0 15px rgba(37, 99, 235, 0.3)" } : {}}>
           <Send className="w-5 h-5" />
         </button>
       </div>
