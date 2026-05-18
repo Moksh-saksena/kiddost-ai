@@ -3136,7 +3136,7 @@ async function sendDailyReminder() {
 }
 
 // Cron: every day at 9 PM IST (= 3:30 PM UTC)
-cron.schedule('30 15 * * *', () => {
+cron.schedule('30 14 * * *', () => {
   console.log('[cron] Triggering daily reminder (9 PM IST)');
   sendDailyReminder();
 });
